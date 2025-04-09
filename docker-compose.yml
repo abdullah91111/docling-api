@@ -1,0 +1,17 @@
+services:
+  docling-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: docling-api:latest
+    container_name: docling-api
+    ports:
+      - "8081:8081"
+    restart: unless-stopped
+    volumes:
+      - .:/app
+      - ~/.cache/docling:/root/.cache/docling
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MAX_WORKERS=4
+    command: uvicorn main:app --host 0.0.0.0 --port 8081 --reload
