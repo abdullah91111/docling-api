@@ -36,99 +36,23 @@ class UrlRequest(DoclingRequestOptions):
 # Helper function to process document and return results (WITHOUT VLM)
 # This is the original implementation for standard /parse endpoints
 async def process_document_common(buf, filename, options):
-    # Configure simple document converter without OCR
+    # Use the simplest possible document converter with no options
     doc_converter = DocumentConverter()
     
-    # Create a source with a Path-like object
+    # Create a source and convert the document
     source = DocumentStream(name=filename, stream=buf)
-    
-    # Convert the document
     result = doc_converter.convert(source)
     
-    # Prepare response data
+    # Prepare minimal response with just document info and markdown
     response_data = {
         "document_name": filename,
         "document_type": str(result.input.format),
+        "markdown": result.document.export_to_markdown()
     }
     
-    # Export to markdown if requested
-    if options.export_markdown:
-        response_data["markdown"] = result.document.export_to_markdown()
-        
-        # Export markdown with embedded images
-        if options.export_figures:
-            try:
-                # Use string output
-                md_with_images = result.document.export_to_markdown(image_mode=ImageRefMode.EMBEDDED)
-                response_data["markdown_with_embedded_images"] = md_with_images
-            except Exception as md_err:
-                response_data["markdown_with_embedded_images_error"] = str(md_err)
-    
-    # Export to JSON if requested
+    # Only add JSON if explicitly requested
     if options.export_json:
         response_data["json"] = result.document.export_to_dict()
-    
-    # Export figures if requested
-    if options.export_figures:
-        page_images = {}
-        for page_no, page in result.document.pages.items():
-            if hasattr(page, 'image') and page.image and hasattr(page.image, 'pil_image'):
-                try:
-                    img_io = BytesIO()
-                    page.image.pil_image.save(img_io, format="PNG")
-                    img_io.seek(0)
-                    page_images[str(page_no)] = base64.b64encode(img_io.getvalue()).decode('utf-8')
-                except Exception as img_err:
-                    page_images[str(page_no)] = f"Error: {str(img_err)}"
-        
-        if page_images:
-            response_data["page_images"] = page_images
-        
-        # Export picture items
-        pictures = []
-        picture_counter = 0
-        for element, _level in result.document.iterate_items():
-            if isinstance(element, PictureItem):
-                try:
-                    picture_counter += 1
-                    img_io = BytesIO()
-                    img = element.get_image(result.document)
-                    if img:
-                        img.save(img_io, format="PNG")
-                        img_io.seek(0)
-                        pictures.append({
-                            "id": picture_counter,
-                            "data": base64.b64encode(img_io.getvalue()).decode('utf-8')
-                        })
-                except Exception as pic_err:
-                    pictures.append({
-                        "id": picture_counter,
-                        "error": str(pic_err)
-                    })
-        
-        if pictures:
-            response_data["pictures"] = pictures
-    
-    # Export tables if requested
-    if options.export_tables:
-        tables = []
-        for table_ix, table in enumerate(result.document.tables):
-            try:
-                table_df = table.export_to_dataframe()
-                tables.append({
-                    "id": table_ix + 1,
-                    "html": table.export_to_html(),
-                    "csv": table_df.to_csv(),
-                    "data": table_df.to_dict(orient='records')
-                })
-            except Exception as table_err:
-                tables.append({
-                    "id": table_ix + 1,
-                    "error": str(table_err)
-                })
-        
-        if tables:
-            response_data["tables"] = tables
     
     return response_data
 
